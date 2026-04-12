@@ -2,4 +2,7 @@ ragvenv/
 __pycache__/
 *.pyc
 .env
-data/docs/
+
+# keep folder, ignore contents
+data/docs/*
+!data/docs/.gitkeep
