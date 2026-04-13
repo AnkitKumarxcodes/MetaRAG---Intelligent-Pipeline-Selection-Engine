@@ -6,3 +6,5 @@ __pycache__/
 # keep folder, ignore contents
 data/docs/*
 !data/docs/.gitkeep
+test.py
+chroma_db/

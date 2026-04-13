@@ -1,16 +1,31 @@
 # pipelines/simple_rag.py
 
-def simple_rag(query, retriever, llm):
-    docs = retriever.get_top_k(query, k=3)
+from .base import BaseRAGPipeline
 
-    context = "\n".join(docs)
 
-    prompt = f"""
-    Answer the question using context only:
-    {context}
+class SimpleRAG(BaseRAGPipeline):
+    def run(self, query: str):
+        docs = self.retriever.invoke(query)
 
-    Question: {query}
-    """
+        context = self.format_context(docs)
 
-    answer = llm(prompt)
-    return {"answer": answer, "contexts": docs}
+        prompt = f"""
+Answer the question based ONLY on the context.
+
+Context:
+{context}
+
+Question:
+{query}
+
+Answer:
+"""
+
+        response = self.llm.invoke(prompt).content
+
+        return {
+            "answer": response,
+            "context": context,
+            "docs": docs,
+            "pipeline": "simple"
+        }

@@ -1,13 +1,57 @@
 # pipelines/rerank_rag.py
 
-def rerank_rag(query, retriever, llm):
-    docs = retriever.get_top_k(query, k=8)
+from .base import BaseRAGPipeline
 
-    # simple heuristic rerank (V1 hack)
-    docs = sorted(docs, key=lambda x: len(x))[:3]
 
-    context = "\n".join(docs)
+class RerankRAG(BaseRAGPipeline):
+    def rerank(self, query, docs):
+        scored = []
 
-    answer = llm(f"{context}\nQuestion: {query}")
+        for d in docs:
+            prompt = f"""
+Rate relevance (0-10):
 
-    return {"answer": answer, "contexts": docs}
+Query: {query}
+Document: {d.page_content}
+
+Score:
+"""
+            score = self.llm.invoke(prompt)
+
+            try:
+                score = float(score.strip())
+            except:
+                score = 0
+
+            scored.append((score, d))
+
+        scored.sort(reverse=True, key=lambda x: x[0])
+
+        return [d for _, d in scored]
+
+    def run(self, query: str):
+        docs = self.retriever.invoke(query)
+
+        ranked_docs = self.rerank(query, docs)
+
+        context = self.format_context(ranked_docs[:3])
+
+        prompt = f"""
+Answer the question based on context.
+
+Context:
+{context}
+
+Question:
+{query}
+
+Answer:
+"""
+
+        response = self.llm.invoke(prompt).content
+
+        return {
+            "answer": response,
+            "context": context,
+            "pipeline": "rerank"
+        }
