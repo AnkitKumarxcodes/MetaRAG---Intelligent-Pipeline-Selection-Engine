@@ -1,6 +1,7 @@
-# chunker.py
+# chunking.py
 
 from __future__ import annotations
+from typing import Any, List, Optional
 import re
 from typing import List, Optional
 from dataclasses import dataclass, field
@@ -373,6 +374,36 @@ class Chunker:
     def chunk_many(self, docs: List[str], sources: Optional[List[str]] = None) -> List[Chunk]:
         """Chunk multiple documents at once."""
         return self._chunker.chunk_many(docs, sources=sources)
+    
+    def chunk_documents(self, docs: List[Any]) -> List[Chunk]:
+        """
+        Chunk Document objects while preserving metadata.
+        Compatible with existing architecture.
+        """
+        all_chunks = []
+
+        for i, doc in enumerate(docs):
+            # support both Document and raw string
+            if isinstance(doc, str):
+                text = doc
+                metadata = {}
+            else:
+                text = getattr(doc, "text", "")
+                metadata = getattr(doc, "metadata", {})
+
+            source = metadata.get("source", f"doc_{i}")
+
+            doc_chunks = self._chunker.chunk(text, source=source)
+
+            # 🔥 merge metadata safely
+            for c in doc_chunks:
+                for k, v in metadata.items():
+                    if k not in ["strategy", "index"]:
+                        c.metadata[k] = v
+
+            all_chunks.extend(doc_chunks)
+
+        return all_chunks
 
     def stats(self, chunks: List[Chunk]) -> dict:
         """Return basic statistics about a set of chunks."""

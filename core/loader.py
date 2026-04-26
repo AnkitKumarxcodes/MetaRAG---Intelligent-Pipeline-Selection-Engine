@@ -1,18 +1,34 @@
-# loader.py
-
 import os
 import json
 import requests
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict
+from dataclasses import dataclass, field
 
+
+# ─────────────────────────────────────────
+# Document Object
+# ─────────────────────────────────────────
+
+@dataclass
+class Document:
+    text: str
+    metadata: Dict = field(default_factory=dict)
+
+    def __repr__(self):
+        preview = self.text[:80].replace("\n", " ")
+        return f"Document(len={len(self.text)}, source={self.metadata.get('source')}, preview='{preview}...')"
+
+
+# ─────────────────────────────────────────
+# Loader
+# ─────────────────────────────────────────
 
 class DocumentLoader:
     def __init__(
         self,
         data_path: Optional[Union[str, List[str]]] = None,
-        recursive: bool = True,             # traverse subdirectories
+        recursive: bool = True,
     ):
-        # Accept a single path or a list of paths
         if data_path is None:
             self.data_paths = []
         elif isinstance(data_path, str):
@@ -23,19 +39,15 @@ class DocumentLoader:
         self.recursive = recursive
 
     # ─────────────────────────────────────────
-    # CORE UTILITY — file discovery
+    # File Discovery
     # ─────────────────────────────────────────
 
     def _iter_files(self, extensions: tuple) -> List[str]:
-        """
-        Yield all file paths matching given extensions across
-        all data_paths, respecting the recursive flag.
-        """
         matched = []
+
         for root_path in self.data_paths:
             root_path = os.path.abspath(root_path)
 
-            # Single file passed directly
             if os.path.isfile(root_path):
                 if root_path.endswith(extensions):
                     matched.append(root_path)
@@ -62,167 +74,170 @@ class DocumentLoader:
     # FILE LOADERS
     # ─────────────────────────────────────────
 
-    def load_txt(self) -> List[str]:
+    def load_txt(self) -> List[Document]:
         docs = []
         for path in self._iter_files((".txt",)):
             with open(path, "r", encoding="utf-8") as f:
-                docs.append(f.read())
+                docs.append(Document(
+                    text=f.read(),
+                    metadata={"source": path, "type": "txt"}
+                ))
         return docs
 
-    def load_pdf(self) -> List[str]:
-        try:
-            from pypdf import PdfReader
-        except ImportError:
-            raise ImportError("Run: pip install pypdf")
+    def load_pdf(self) -> List[Document]:
+        from pypdf import PdfReader
 
         docs = []
         for path in self._iter_files((".pdf",)):
             reader = PdfReader(path)
-            text = "\n".join(page.extract_text() or "" for page in reader.pages)
-            if text.strip():
-                docs.append(text)
-            else:
-                print(f"[Warning] Scanned PDF, no text extracted: {path}")
+
+            for i, page in enumerate(reader.pages):
+                text = page.extract_text() or ""
+                if text.strip():
+                    docs.append(Document(
+                        text=text,
+                        metadata={
+                            "source": path,
+                            "type": "pdf",
+                            "page": i
+                        }
+                    ))
         return docs
 
-    def load_html(self) -> List[str]:
-        try:
-            from bs4 import BeautifulSoup
-        except ImportError:
-            raise ImportError("Run: pip install beautifulsoup4")
+    def load_html(self) -> List[Document]:
+        from bs4 import BeautifulSoup
 
         docs = []
         for path in self._iter_files((".html", ".htm")):
             with open(path, "r", encoding="utf-8") as f:
                 soup = BeautifulSoup(f.read(), "html.parser")
+
                 for tag in soup(["script", "style", "nav", "footer", "header"]):
                     tag.decompose()
+
                 text = soup.get_text(separator="\n", strip=True)
+
                 if text:
-                    docs.append(text)
+                    docs.append(Document(
+                        text=text,
+                        metadata={"source": path, "type": "html"}
+                    ))
         return docs
 
-    def load_docx(self) -> List[str]:
-        try:
-            from docx import Document
-        except ImportError:
-            raise ImportError("Run: pip install python-docx")
+    def load_docx(self) -> List[Document]:
+        from docx import Document as DocxDocument
 
         docs = []
         for path in self._iter_files((".docx",)):
-            doc = Document(path)
+            doc = DocxDocument(path)
             text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
             if text:
-                docs.append(text)
+                docs.append(Document(
+                    text=text,
+                    metadata={"source": path, "type": "docx"}
+                ))
         return docs
 
-    def load_csv(self, text_columns: Optional[List[str]] = None) -> List[str]:
-        try:
-            import pandas as pd
-        except ImportError:
-            raise ImportError("Run: pip install pandas")
+    def load_csv(self, text_columns: Optional[List[str]] = None) -> List[Document]:
+        import pandas as pd
 
         docs = []
         for path in self._iter_files((".csv",)):
             df = pd.read_csv(path)
+
             cols = text_columns if text_columns else df.select_dtypes(include="object").columns.tolist()
-            for _, row in df.iterrows():
+
+            for i, row in df.iterrows():
                 row_text = " | ".join(
                     f"{col}: {row[col]}" for col in cols
                     if col in row and pd.notna(row[col])
                 )
+
                 if row_text.strip():
-                    docs.append(row_text)
+                    docs.append(Document(
+                        text=row_text,
+                        metadata={
+                            "source": path,
+                            "type": "csv",
+                            "row": i
+                        }
+                    ))
         return docs
 
-    def load_json(self, text_key: Optional[str] = None) -> List[str]:
+    def load_json(self, text_key: Optional[str] = None) -> List[Document]:
         docs = []
+
         for path in self._iter_files((".json",)):
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+
             if text_key and isinstance(data, list):
-                for item in data:
+                for i, item in enumerate(data):
                     if isinstance(item, dict) and text_key in item:
-                        docs.append(str(item[text_key]))
+                        docs.append(Document(
+                            text=str(item[text_key]),
+                            metadata={
+                                "source": path,
+                                "type": "json",
+                                "index": i
+                            }
+                        ))
             else:
-                docs.append(json.dumps(data, indent=2))
+                docs.append(Document(
+                    text=json.dumps(data, indent=2),
+                    metadata={"source": path, "type": "json"}
+                ))
+
         return docs
 
     # ─────────────────────────────────────────
     # WEB LOADERS
     # ─────────────────────────────────────────
 
-    def load_url(self, url: str) -> str:
-        try:
-            from bs4 import BeautifulSoup
-        except ImportError:
-            raise ImportError("Run: pip install beautifulsoup4")
+    def load_url(self, url: str) -> Document:
+        from bs4 import BeautifulSoup
 
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
 
-        if "application/pdf" in response.headers.get("Content-Type", ""):
-            import io
-            from pypdf import PdfReader
-            reader = PdfReader(io.BytesIO(response.content))
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
-
         soup = BeautifulSoup(response.text, "html.parser")
+
         for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
-        return soup.get_text(separator="\n", strip=True)
 
-    def load_urls(self, urls: List[str]) -> List[str]:
+        text = soup.get_text(separator="\n", strip=True)
+
+        return Document(
+            text=text,
+            metadata={"source": url, "type": "web"}
+        )
+
+    def load_urls(self, urls: List[str]) -> List[Document]:
         docs = []
         for url in urls:
             try:
-                text = self.load_url(url)
-                if text.strip():
-                    docs.append(text)
-                    print(f"[✓] {url}")
+                doc = self.load_url(url)
+                docs.append(doc)
+                print(f"[✓] {url}")
             except Exception as e:
                 print(f"[✗] Failed {url}: {e}")
         return docs
 
-    def load_sitemap(self, sitemap_url: str, max_pages: int = 20) -> List[str]:
-        try:
-            from bs4 import BeautifulSoup
-        except ImportError:
-            raise ImportError("Run: pip install beautifulsoup4")
+    def load_sitemap(self, sitemap_url: str, max_pages: int = 20) -> List[Document]:
+        from bs4 import BeautifulSoup
 
         response = requests.get(sitemap_url, timeout=10)
         soup = BeautifulSoup(response.text, "xml")
+
         urls = [loc.text for loc in soup.find_all("loc")][:max_pages]
-        print(f"[Sitemap] Found {len(urls)} URLs, loading up to {max_pages}...")
+        print(f"[Sitemap] Found {len(urls)} URLs")
+
         return self.load_urls(urls)
 
     # ─────────────────────────────────────────
-    # SUMMARY
-    # ─────────────────────────────────────────
-
-    def summary(self):
-        """Print a tree of all discovered files across all paths."""
-        print("\n[DocumentLoader] File Discovery Summary")
-        print("=" * 45)
-        all_exts = (".txt", ".pdf", ".html", ".htm", ".docx", ".csv", ".json")
-        for path in self.data_paths:
-            print(f"\n📁 {os.path.abspath(path)}")
-            files = self._iter_files(all_exts)
-            by_dir = {}
-            for f in files:
-                folder = os.path.dirname(f)
-                by_dir.setdefault(folder, []).append(os.path.basename(f))
-            for folder, fnames in by_dir.items():
-                rel = os.path.relpath(folder, path)
-                print(f"  └─ {rel}/")
-                for name in fnames:
-                    print(f"       • {name}")
-        print(f"\nTotal paths: {len(self.data_paths)} | Recursive: {self.recursive}")
-        print("=" * 45)
-
-    # ─────────────────────────────────────────
-    # UNIFIED ENTRY POINT
+    # MAIN ENTRY
     # ─────────────────────────────────────────
 
     def load_all(
@@ -231,8 +246,9 @@ class DocumentLoader:
         sitemap_url: Optional[str] = None,
         json_text_key: Optional[str] = None,
         csv_text_columns: Optional[List[str]] = None,
-    ) -> List[str]:
-        docs = []
+    ) -> List[Document]:
+
+        docs: List[Document] = []
 
         if self.data_paths:
             loaders = [
@@ -243,6 +259,7 @@ class DocumentLoader:
                 ("CSV",  lambda: self.load_csv(csv_text_columns)),
                 ("JSON", lambda: self.load_json(json_text_key)),
             ]
+
             for name, loader in loaders:
                 try:
                     loaded = loader()
