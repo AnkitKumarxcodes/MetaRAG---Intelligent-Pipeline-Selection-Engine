@@ -1,3 +1,5 @@
+
+
 <div align="center">
 <img src="https://raw.githubusercontent.com/AnkitKumarxcodes/metarag-sdk/main/assets/metarag_logo.svg" width="680" alt="MetaRAG SDK — Intelligent Pipeline Selection Engine"/>
 
@@ -563,6 +565,12 @@ source .venv/bin/activate      # Windows: .venv\Scripts\activate
 
 pip install -e .
 pip install -r requirements-dev.txt
+```
+
+Download NLTK data required for chunking tests:
+
+```bash
+python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('punkt_tab', quiet=True)"
 ```
 
 Run the test suite before opening a PR:
