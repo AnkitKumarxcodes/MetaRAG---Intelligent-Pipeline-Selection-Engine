@@ -69,13 +69,13 @@ MetaRAG owns the **entire RAG workflow** — from raw documents to evaluated, au
 ## 🏗 Architecture
 
 ```
-                        ┌─────────────────────────────────────────┐
+                        ┌──────────────────────────────────────────┐
                         │              USER INTERFACE              │
                         │   MetaRAG(docs, embeddings, generator)   │
                         │            .fit()  .ask()                │
-                        └─────────────────┬─────────────────────────┘
+                        └─────────────────┬────────────────────────┘
                                           │
-                 ┌────────────────────────▼────────────────────────┐
+                 ┌────────────────────────▼─────────────────────────┐
                  │                    METARAG CORE                  │
                  │                                                  │
                  │   ┌──────────┐    ┌──────────┐   ┌───────────┐   │
@@ -83,9 +83,9 @@ MetaRAG owns the **entire RAG workflow** — from raw documents to evaluated, au
                  │   └──────────┘    └──────────┘   └─────┬─────┘   │
                  │                                        │         │
                  │                              ┌─────────▼──────┐  │
-                 │                              │  Vector Database│ │
-                 │                              │ InMemory│Chroma │ │
-                 │                              │      │ FAISS   │ │
+                 │                              │ Vector Database│  │
+                 │                              │ InMemory│Chroma│  │
+                 │                              │      │ FAISS   │  │
                  │                              └─────────┬──────┘  │
                  │                                        │         │
                  │                              ┌─────────▼──────┐  │
@@ -94,7 +94,7 @@ MetaRAG owns the **entire RAG workflow** — from raw documents to evaluated, au
                  │                              │ Hybrid │ MMR   │  │
                  │                              └─────────┬──────┘  │
                  │                                        │         │
-    Query ──────►│   ┌──────────┐               ┌────────▼──────┐  │
+    Query ──────►│   ┌──────────┐               ┌────────▼──────┐   │
                  │   │  Router  │──────────────► │   Pipelines  │   │
                  │   │ (cold-   │               │Straight│MQuery│   │
                  │   │  start → │               │Reranked│Full  │   │
